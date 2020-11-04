@@ -189,3 +189,10 @@ Thus far, the best algorithm implemented here is a brute force method, where all
   :ic (good-modsp inp)
   (let ((rez (fold-loanp inp)))
     (mod (car rez) (cdr rez))))
+
+(definec is-solp (inp :loanp guess :int) :bool
+  :ic (good-modsp inp)
+  (if (endp (rest inp))
+    (cong-mod guess (car (first inp)) (cdr (first inp)))
+    (and (cong-mod guess (car (first inp)) (cdr (first inp)))
+         (is-solp (rest inp) guess))))
