@@ -66,7 +66,7 @@
 
 #|
 
-This code serves as a basic algorithm for finding solutions to the Chinese Remainder Theorem.
+This code serves as a algorithm for finding solutions to the Chinese Remainder Theorem.
 
 The parameters are traditionally specified as a collection of 'a' values representing modular
 congruencies, and a collection of corresponding 'n' values which represent the modulos over
@@ -74,11 +74,6 @@ which these values operate.
 
 This data is represented here as an association list of positive integers, where each 'a' value
 is a key and the corresponding 'n' value is its val.
-
-
-Thus far, the best algorithm implemented here is a brute force method, where all values from N
-(the product of all 'n' values) downward are checked sequentially for CRT satisfaction.
-
 |#
 
 
@@ -140,59 +135,113 @@ Thus far, the best algorithm implemented here is a brute force method, where all
     1
     (* (car l) (product (cdr l)))))
 
+(check= (product '()) 1)
+(check= (product '(3)) 3)
+(check= (product '(3 1)) 3)
+(check= (product '(3 5 7)) 105)
+       
+
+; Determines if x and y are congruent to each other mod m
 (definec cong-mod (x :int y :int m :pos) :bool
   (equal (mod x m) (mod y m)))
 
+(check= (cong-mod 3 3 5) t)
+(check= (cong-mod 8 8 5) t)
+(check= (cong-mod 3 8 5) t)
+(check= (cong-mod 2 3 5) nil)
+
+; Simplifies an a-n pair by moding the a by the n
 (definec mod-anp (inp :anp) :anp
   (cons (mod (car inp) (cdr inp)) (cdr inp)))
 
+(check= (mod-anp '(5 . 7)) '(5 . 7))
+(check= (mod-anp '(12 . 7)) '(5 . 7))
+(check= (mod-anp '(7 . 7)) '(0 . 7))
+
+; Simplifies a loanp by calling mod-anp on all it's values
 (definec mod-as (inp :loanp) :loanp
   (cond ((endp (rest inp)) `(,(mod-anp (first inp))))
         (t (cons (mod-anp (first inp))
                  (mod-as (rest inp))))))
 
+(check= (mod-as '((19 . 5))) '((4 . 5)))
+(check= (mod-as '((4 . 5))) '((4 . 5)))
+(check= (mod-as '((19 . 5) (3 . 2))) '((4 . 5) (1 . 2)))
+
+; Determines if ad is a valid ad value for these two pairs
 (definec check-is-ad (lhs :anp rhs :anp ad :nat) :bool
   (cong-mod (car rhs) (+ (* ad (cdr lhs)) (car lhs)) (cdr rhs)))
 
-
-
+; Finds a valid ad value starting from ad and working up to the cdr of the rhs
 (definec find-ad-from (lhs :anp rhs :anp ad :nat) :nat
   :ic (rpp (cdr lhs) (cdr rhs))
   (cond ((check-is-ad lhs rhs ad) ad)
         ((> ad (cdr rhs)) 0)
         (t (find-ad-from lhs rhs (1+ ad)))))
 
+; Finds a valid ad starting from zero
 (definec find-ad (lhs :anp rhs :anp) :nat
   :ic (rpp (cdr lhs) (cdr rhs))
   (find-ad-from lhs rhs 0))
 
+; Generates a d pair by finding a valid ad and joining it to the next modulo
 (definec find-d (lhs :anp rhs :anp) :anp
   :ic (rpp (cdr lhs) (cdr rhs))
   (cons (find-ad lhs rhs) (cdr rhs)))
 
-(definec next-term (current :anp second :anp) :anp
-  :ic (rpp (cdr current) (cdr second))
-  (let ((d (find-d current second)))
+; Joins to a-n pairs by finding the pair where the a is congruent with the two input a's mod the
+; two input n's, and the n is the product of the two input n's
+(definec next-term (current :anp snd :anp) :anp
+  :ic (rpp (cdr current) (cdr snd))
+  (let ((d (find-d current snd)))
     (cons (+ (car current) (* (cdr current) (first d)))
-          (* (cdr d) (cdr current)))))#|ACL2s-ToDo-Line|#
+          (* (cdr d) (cdr current)))))
 
+(check= (next-term '(4 . 5) '(3 . 7)) '(24 . 35))
 
+:program
+; Collapses a list of moduli and congruence pairs into the pair that represents the solution and 
+; the product of all the moduli.
+; ACL2s is stupid and thinks the guards fail, despite us telling it not to bother
 (definec fold-loanp (inp :loanp) :anp
   :ic (good-modsp inp)
-  (declare (xargs :time-limit nil
-                  :verify-guards nil))
+  (declare (xargs :time-limit nil))
   (if (endp (cdr inp)) 
       (car inp)
       (next-term (car inp) (fold-loanp (cdr inp)))))
 
+(check= (fold-loanp '((2 . 3) (19 . 5) (24 . 7))) '(59 . 105))
+(check= (fold-loanp '((2 . 3) (4 . 5) (3 . 7))) '(59 . 105))
+(check= (fold-loanp '((2 . 3))) '(2 . 3))
+(check= (fold-loanp '((4 . 5) (3 . 7))) '(24 . 35))
+
+; Finds a solution to the provided system of linear congruences
 (definec solve-crt (inp :loanp) :int
   :ic (good-modsp inp)
   (let ((rez (fold-loanp inp)))
     (mod (car rez) (cdr rez))))
 
+(check= (solve-crt '((2 . 3) (19 . 5) (24 . 7))) 59)
+(check= (solve-crt '((2 . 3) (4 . 5) (3 . 7))) 59)
+(check= (solve-crt '((2 . 3))) 2)
+(check= (solve-crt '((4 . 5) (3 . 7))) 24)
+
+; Determines if the given guess is a solution to the provided system of linear congruences
 (definec is-solp (inp :loanp guess :int) :bool
   :ic (good-modsp inp)
   (if (endp (rest inp))
     (cong-mod guess (car (first inp)) (cdr (first inp)))
     (and (cong-mod guess (car (first inp)) (cdr (first inp)))
          (is-solp (rest inp) guess))))
+
+(check= (is-solp '((2 . 3) (19 . 5) (24 . 7)) 59) t)
+(check= (is-solp '((2 . 3) (4 . 5) (3 . 7)) 59) t)
+(check= (is-solp '((2 . 3)) 2) t)
+(check= (is-solp '((4 . 5) (3 . 7)) 24) t)
+(check= (is-solp '((2 . 3) (19 . 5) (24 . 7)) 164) t)
+(check= (is-solp '((2 . 3)) 5) t)
+(check= (is-solp '((4 . 5) (3 . 7)) 59) t)
+(check= (is-solp '((2 . 3) (19 . 5) (24 . 7)) 78) nil)
+(check= (is-solp '((2 . 3)) 0) nil)
+(check= (is-solp '((4 . 5) (3 . 7)) 15) nil)#|ACL2s-ToDo-Line|#
+
